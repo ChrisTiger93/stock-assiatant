@@ -5,6 +5,7 @@ import json
 from typing import AsyncGenerator, List, Optional
 from datetime import datetime, timezone
 
+import httpx
 from openai import AsyncOpenAI
 from loguru import logger
 
@@ -71,6 +72,7 @@ class AIOrchestrator:
         self.client = AsyncOpenAI(
             api_key=settings.deepseek_api_key,
             base_url=settings.deepseek_base_url,
+            timeout=httpx.Timeout(60.0, connect=15.0),
         )
 
     async def chat_stream(
@@ -182,38 +184,20 @@ class AIOrchestrator:
 
                 # 执行工具并添加结果
                 for tc in tool_calls_buffer:
-                    if tc["function"]["name"] == "search":
-                        result = await self._execute_search(tc)
-                        yield result
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": json.dumps(result.get("data", []), ensure_ascii=False),
-                        })
-                    elif tc["function"]["name"] == "get_stock_price":
-                        result = await self._execute_stock_price(tc)
-                        yield result
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": json.dumps(result.get("data", {}), ensure_ascii=False),
-                        })
-                    elif tc["function"]["name"] == "get_stock_financials":
-                        result = await self._execute_stock_financials(tc)
-                        yield result
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": json.dumps(result.get("data", {}), ensure_ascii=False),
-                        })
-                    elif tc["function"]["name"] == "get_stock_news":
-                        result = await self._execute_stock_news(tc)
-                        yield result
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": json.dumps(result.get("data", {}), ensure_ascii=False),
-                        })
+                    result = await self._execute_tool(tc)
+                    yield result
+                    data = result.get("data", [])
+                    if isinstance(data, list):
+                        content = json.dumps(data, ensure_ascii=False)
+                    elif isinstance(data, dict):
+                        content = json.dumps(data, ensure_ascii=False)
+                    else:
+                        content = json.dumps({}, ensure_ascii=False)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": content,
+                    })
 
                 # 继续流式生成最终回复
                 stream2 = await self.client.chat.completions.create(
@@ -256,104 +240,54 @@ class AIOrchestrator:
         full_content = clean_tool_markup(full_content)
         yield {"type": "done", "content": full_content}
 
-    async def _execute_search(self, tool_call: dict) -> dict:
-        """执行搜索工具调用"""
+    # ----------------------------------------------------------------
+    # 工具执行 — 统一 dispatch
+    # ----------------------------------------------------------------
+
+    async def _execute_tool(self, tc: dict) -> dict:
+        """执行单个工具调用，返回 tool_result 事件"""
+        name = tc["function"]["name"]
         try:
-            args = json.loads(tool_call["function"]["arguments"])
-            query = args.get("query", "")
-            logger.info(f"Searching: {query}")
+            args = json.loads(tc["function"]["arguments"])
+        except json.JSONDecodeError:
+            return {"type": "tool_result", "tool": name, "error": "Invalid JSON arguments"}
 
-            results = await search_engine.search(query, num_results=5)
-
-            # 存储搜索结果到知识片段
-            for r in results:
-                snippet = f"{r['title']}: {r['snippet']}"
-                try:
-                    await self.memory.add_knowledge_snippet(
-                        content=snippet, url=r["url"], query=query
-                    )
-                except Exception:
-                    pass
-
-            return {
-                "type": "tool_result",
-                "tool": "search",
-                "query": query,
-                "data": results,
-            }
-        except Exception as e:
-            logger.error(f"Search execution failed: {e}")
-            return {
-                "type": "tool_result",
-                "tool": "search",
-                "error": str(e),
-            }
-
-    async def _execute_stock_price(self, tool_call: dict) -> dict:
-        """执行股票行情查询"""
         try:
-            args = json.loads(tool_call["function"]["arguments"])
-            symbol = args.get("symbol", "").upper()
-            logger.info(f"Stock price: {symbol}")
-
-            data = await finance_engine.get_stock_price(symbol)
-            return {
-                "type": "tool_result",
-                "tool": "get_stock_price",
-                "symbol": symbol,
-                "data": data,
-            }
+            if name == "search":
+                return await self._exec_search(args)
+            elif name == "get_stock_price":
+                return await self._exec_finance("get_stock_price", args, finance_engine.get_stock_price)
+            elif name == "get_stock_financials":
+                return await self._exec_finance("get_stock_financials", args, finance_engine.get_stock_financials)
+            elif name == "get_stock_news":
+                return await self._exec_finance("get_stock_news", args, finance_engine.get_stock_news)
+            else:
+                return {"type": "tool_result", "tool": name, "error": f"Unknown tool: {name}"}
         except Exception as e:
-            logger.error(f"Stock price failed: {e}")
-            return {
-                "type": "tool_result",
-                "tool": "get_stock_price",
-                "error": str(e),
-            }
+            logger.error(f"Tool {name} failed: {e}")
+            return {"type": "tool_result", "tool": name, "error": str(e)}
 
-    async def _execute_stock_financials(self, tool_call: dict) -> dict:
-        """执行财务数据查询"""
-        try:
-            args = json.loads(tool_call["function"]["arguments"])
-            symbol = args.get("symbol", "").upper()
-            logger.info(f"Stock financials: {symbol}")
+    async def _exec_search(self, args: dict) -> dict:
+        query = args.get("query", "")
+        logger.info(f"Searching: {query}")
+        results = await search_engine.search(query, num_results=5)
 
-            data = await finance_engine.get_stock_financials(symbol)
-            return {
-                "type": "tool_result",
-                "tool": "get_stock_financials",
-                "symbol": symbol,
-                "data": data,
-            }
-        except Exception as e:
-            logger.error(f"Stock financials failed: {e}")
-            return {
-                "type": "tool_result",
-                "tool": "get_stock_financials",
-                "error": str(e),
-            }
+        # 存储搜索结果到知识片段
+        for r in results:
+            snippet = f"{r['title']}: {r['snippet']}"
+            try:
+                await self.memory.add_knowledge_snippet(
+                    content=snippet, url=r["url"], query=query)
+            except Exception:
+                pass
 
-    async def _execute_stock_news(self, tool_call: dict) -> dict:
-        """执行股票新闻查询"""
-        try:
-            args = json.loads(tool_call["function"]["arguments"])
-            symbol = args.get("symbol", "").upper()
-            logger.info(f"Stock news: {symbol}")
+        return {"type": "tool_result", "tool": "search", "query": query, "data": results}
 
-            data = await finance_engine.get_stock_news(symbol)
-            return {
-                "type": "tool_result",
-                "tool": "get_stock_news",
-                "symbol": symbol,
-                "data": data,
-            }
-        except Exception as e:
-            logger.error(f"Stock news failed: {e}")
-            return {
-                "type": "tool_result",
-                "tool": "get_stock_news",
-                "error": str(e),
-            }
+    async def _exec_finance(self, tool_name: str, args: dict, fn) -> dict:
+        symbol = args.get("symbol", "").upper()
+        logger.info(f"{tool_name}: {symbol}")
+        data = await fn(symbol)
+        return {"type": "tool_result", "tool": tool_name, "symbol": symbol, "data": data}
 
     async def finalize_conversation(
         self, conversation_id: str, messages: List[dict]

@@ -99,7 +99,7 @@ fun ChatScreen(
                                 }
                             }
                         },
-                        enabled = !state.isGenerating && inputText.value.isNotBlank(),
+                        enabled = !state.isGenerating && !state.isReconnecting && inputText.value.isNotBlank(),
                     ) {
                         Icon(Icons.Default.Send, contentDescription = "发送")
                     }
@@ -107,14 +107,32 @@ fun ChatScreen(
             }
         },
     ) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            state = listState,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // 重连提示
+            if (state.isReconnecting) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                ) {
+                    Text(
+                        text = "连接断开，正在重连...",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
             items(state.messages, key = { it.id }) { message ->
                 when (message.role) {
                     "system" -> SystemBubble(message.content)
@@ -135,6 +153,7 @@ fun ChatScreen(
                         modifier = Modifier.padding(8.dp),
                     )
                 }
+            }
             }
         }
     }

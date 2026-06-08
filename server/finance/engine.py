@@ -38,10 +38,13 @@ class FinanceEngine:
         self._metric_cache[sym] = (now, data)
         return data
 
-    async def _run(self, fn, *args, **kwargs):
-        """在线程池中执行同步 SDK 调用"""
+    async def _run(self, fn, *args, timeout: float = 15.0, **kwargs):
+        """在线程池中执行同步 SDK 调用，带超时"""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(_EXECUTOR, lambda: fn(*args, **kwargs))
+        return await asyncio.wait_for(
+            loop.run_in_executor(_EXECUTOR, lambda: fn(*args, **kwargs)),
+            timeout=timeout,
+        )
 
     # ------------------------------------------------------------------
     # 公开接口

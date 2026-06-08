@@ -22,6 +22,7 @@ data class ChatUiState(
     val title: String = "加载中...",
     val messages: List<ChatMessage> = emptyList(),
     val isConnected: Boolean = false,
+    val isReconnecting: Boolean = false,
     val isGenerating: Boolean = false,
     val ttsEnabled: Boolean = true,
     val error: String? = null,
@@ -85,6 +86,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage(content: String) {
         if (content.isBlank()) return
+        // 防止并发发送导致 streamingMessageId 被覆盖
+        if (_uiState.value.isGenerating) return
 
         val userMsg = ChatMessage(
             id = "user_${System.currentTimeMillis()}",
@@ -103,6 +106,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             messages = _uiState.value.messages + userMsg + placeholderMsg,
             isGenerating = true,
+            error = null,
         )
 
         wsClient?.sendMessage(content)
@@ -160,8 +164,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            "ws_connected" -> {
+                _uiState.value = _uiState.value.copy(isConnected = true, isReconnecting = false)
+            }
+
+            "ws_reconnecting" -> {
+                _uiState.value = _uiState.value.copy(isReconnecting = true)
+            }
+
             "closed" -> {
-                _uiState.value = _uiState.value.copy(isConnected = false)
+                _uiState.value = _uiState.value.copy(isConnected = false, isReconnecting = false)
             }
         }
     }
