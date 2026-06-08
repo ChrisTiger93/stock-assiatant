@@ -12,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,7 +118,7 @@ private fun ConversationItem(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var showDeleteDialog by androidx.compose.runtime.mutableStateOf(false)
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     if (showDeleteDialog) {
         AlertDialog(
