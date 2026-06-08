@@ -1,0 +1,55 @@
+# ===== 环境配置 =====
+.env
+**/docker/.env
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+venv/
+.venv/
+
+# ===== Android / Gradle =====
+client/.gradle/
+client/build/
+client/app/build/
+client/local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# ===== IDE & Editor =====
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# ===== 数据文件 =====
+data/
+*.db
+*.sqlite3
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Docker =====
+docker-compose.override.yml
+
+# ===== 日志 =====
+*.log
+logs/
+
+# ===== 临时文件 =====
+*.tmp
+*.bak
+test_*.wav
+test_*.pcm

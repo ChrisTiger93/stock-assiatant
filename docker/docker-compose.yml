@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+  # ==================== API 服务 ====================
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: ai-assistant-api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      # 容器内网络用服务名，覆盖 .env 中的 localhost
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+      - SEARXNG_BASE_URL=http://searxng:8080
+      - CHROMA_PERSIST_DIR=/data/chromadb
+    volumes:
+      - ../data/chromadb:/data/chromadb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - assistant-net
+
+  # ==================== PostgreSQL ====================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-assistant-db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-ai_assistant}
+      - POSTGRES_USER=${POSTGRES_USER:-assistant}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - ../data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-assistant} -d ${POSTGRES_DB:-ai_assistant}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - assistant-net
+
+  # ==================== Redis ====================
+  redis:
+    image: redis:7-alpine
+    container_name: ai-assistant-redis
+    volumes:
+      - ../data/redis:/data
+    restart: unless-stopped
+    networks:
+      - assistant-net
+
+  # ==================== SearXNG 搜索 ====================
+  searxng:
+    image: searxng/searxng:latest
+    container_name: ai-assistant-search
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    restart: unless-stopped
+    networks:
+      - assistant-net
+
+networks:
+  assistant-net:
+    driver: bridge
