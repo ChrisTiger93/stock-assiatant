@@ -39,7 +39,7 @@ android {
 
 dependencies {
     // Compose BOM
-    val composeBom = platform("androidx.compose:compose-bom:2024.05.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
 
     implementation("androidx.compose.ui:ui")
@@ -64,6 +64,10 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Markdown rendering
+    implementation("com.mikepenz:multiplatform-markdown-renderer:0.32.0")
+    implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.32.0")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

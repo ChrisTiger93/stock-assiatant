@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownTypography
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,12 +188,20 @@ private fun ChatBubble(
                 )
                 .padding(12.dp),
         ) {
-            Text(
-                text = content + if (isStreaming) "▌" else "",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (isUser) {
+                Text(
+                    text = content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            } else {
+                Markdown(
+                    content = content + if (isStreaming) "▌" else "",
+                    typography = markdownTypography(
+                        text = MaterialTheme.typography.bodySmall,
+                    ),
+                )
+            }
         }
     }
 }
